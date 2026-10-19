@@ -31,6 +31,7 @@ import {
   saveProfileName,
   sendSos as sendSosOnServer,
   startOrUpdateCheckIn,
+  type EndCheckInResult,
   type ServerCheckIn,
   type SosResult,
 } from '@/services/server';
@@ -62,7 +63,8 @@ type SafetyStore = {
 
   checkIn: CheckIn | null;
   startCheckIn: (returnBy: Date) => Promise<boolean>;
-  endCheckIn: () => Promise<boolean>;
+  // Says whether the server got it in time, or your Circle was already alerted.
+  endCheckIn: () => Promise<EndCheckInResult>;
 
   contacts: Contact[];
   addContact: (name: string, phone: string) => Promise<boolean>;
@@ -254,9 +256,9 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     },
     endCheckIn: async () => {
       const id = checkIn?.server?.id;
-      const savedToServer = id ? await markCheckInSafe(id) : false;
+      const result: EndCheckInResult = id ? await markCheckInSafe(id) : { reached: false };
       setCheckIn(null); // always end it on the phone
-      return savedToServer;
+      return result;
     },
 
     contacts,

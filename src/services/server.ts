@@ -153,15 +153,43 @@ export async function startOrUpdateCheckIn(returnBy: Date): Promise<string | nul
   return inserted.data.id;
 }
 
-/** Tell the server you're safe. */
-export async function markCheckInSafe(id: string): Promise<boolean> {
-  if (!supabase) return false;
-  const { error } = await supabase
+// What really happened when you tapped "I'm safe".
+export type EndCheckInResult =
+  | { reached: false } // couldn't reach the server
+  | { reached: true; alreadyMissed: false } // marked safe in time: nobody alerted
+  // Too late: already missed. alertsSummary says what was actually sent,
+  // e.g. "Texted 1 of 1", "Texted 0 of 2 (…errors…)" or "No one in Circle".
+  | { reached: true; alreadyMissed: true; alertsSentAt: string | null; alertsSummary: string | null };
+
+/**
+ * Tell the server you're safe. Only works while the check-in is still active:
+ * if the server already marked it missed, it can't be changed (the privacy
+ * rules forbid it), and we report that instead of pretending it worked.
+ */
+export async function markCheckInSafe(id: string): Promise<EndCheckInResult> {
+  if (!supabase) return { reached: false };
+  const { data, error } = await supabase
     .from('check_ins')
     .update({ status: 'safe', ended_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) console.warn('Could not mark check-in safe:', error.message);
-  return !error;
+    .eq('id', id)
+    .eq('status', 'active')
+    .select('id');
+  if (error) {
+    console.warn('Could not mark check-in safe:', error.message);
+    return { reached: false };
+  }
+  if (data.length > 0) return { reached: true, alreadyMissed: false };
+
+  // Nothing was updated, so it's no longer active: find out what happened.
+  const latest = await fetchCheckInStatus(id);
+  if (!latest) return { reached: false };
+  if (latest.status === 'safe') return { reached: true, alreadyMissed: false };
+  return {
+    reached: true,
+    alreadyMissed: true,
+    alertsSentAt: latest.alertsSentAt,
+    alertsSummary: latest.alertsSummary,
+  };
 }
 
 export type ServerCheckIn = {

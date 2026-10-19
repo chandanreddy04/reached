@@ -27,13 +27,26 @@ export default function HomeScreen() {
   }, [checkIn]);
 
   async function handleImSafe() {
-    const savedToServer = await endCheckIn();
-    if (savedToServer) {
+    // Remember whether the return time had already passed before ending it.
+    const wasOverdue = checkIn !== null && checkIn.returnBy.getTime() <= Date.now();
+    const result = await endCheckIn();
+
+    // Tell the truth about whether your Circle was alerted.
+    if (result.reached && !result.alreadyMissed) {
       Alert.alert('Glad you made it home!', 'Your check-in has ended. Nobody was alerted.');
+    } else if (result.reached && result.alertsSentAt && result.alertsSummary !== 'Sending…') {
+      Alert.alert("Glad you're safe", describeAlertsSent(result.alertsSentAt, result.alertsSummary));
+    } else if (result.reached) {
+      Alert.alert(
+        "Glad you're safe",
+        "Your check-in was already marked missed, so your Circle may have been alerted. Please let them know you're OK.",
+      );
     } else {
       Alert.alert(
         'Ended on this phone only',
-        "The server couldn't be reached, so it may still mark this check-in as missed. Check your internet.",
+        wasOverdue
+          ? "The server couldn't be reached. Your return time had passed, so your Circle may have been alerted. Please let them know you're OK."
+          : "The server couldn't be reached, so it may still mark this check-in as missed. Check your internet.",
       );
     }
   }
@@ -52,7 +65,7 @@ export default function HomeScreen() {
             <Text style={styles.missedTitle}>MISSED CHECK-IN</Text>
             <Text style={styles.missedBody}>
               {checkIn.server?.alertsSentAt && checkIn.server.alertsSummary !== 'Sending…'
-                ? `Your Circle was alerted at ${formatClock(new Date(checkIn.server.alertsSentAt))}: ${checkIn.server.alertsSummary}.`
+                ? describeAlertsSent(checkIn.server.alertsSentAt, checkIn.server.alertsSummary ?? null)
                 : 'Texting your Circle now…'}
             </Text>
             <Text style={styles.missedBody}>
@@ -134,6 +147,23 @@ export default function HomeScreen() {
       )}
     </Screen>
   );
+}
+
+/**
+ * Explains what the server actually sent after a missed check-in, based on
+ * its summary ("Texted 1 of 1", "Texted 0 of 2 (…)", "No one in Circle").
+ */
+function describeAlertsSent(sentAt: string, summary: string | null) {
+  const time = formatClock(new Date(sentAt));
+  if (summary === 'No one in Circle') {
+    return 'Your check-in was already missed, but your Circle is empty, so nobody was texted.';
+  }
+  const counts = summary?.match(/^Texted (\d+) of (\d+)/);
+  if (counts && counts[1] === '0') {
+    return `Your check-in was already missed at ${time}, but the alert texts couldn't be delivered. Nobody in your Circle was reached.`;
+  }
+  const sent = counts ? ` (texted ${counts[1]} of ${counts[2]})` : '';
+  return `Your check-in was already missed, and your Circle was alerted at ${time}${sent}. Please let them know you're OK.`;
 }
 
 const styles = StyleSheet.create({
