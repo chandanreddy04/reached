@@ -8,16 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type Contact, useSafety } from '@/state/safety-store';
-
-// Text messages need the full international format: + country code + number,
-// e.g. +15551234567 (US), +447700900123 (UK), +919876543210 (India).
-// We remove spaces, dashes, dots and brackets, then check the format.
-function normalizePhone(input: string) {
-  return input.replace(/[\s\-().]/g, '');
-}
-function isValidPhone(phone: string) {
-  return /^\+[1-9]\d{7,14}$/.test(phone);
-}
+import { isValidPhone, normalizePhone } from '@/utils/phone';
 
 /** Circle of Trust: the people who get alerted if you miss a check-in. */
 export default function CircleScreen() {

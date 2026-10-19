@@ -1,16 +1,17 @@
 /**
  * The app's shared memory.
  *
- * Several screens need the same information (the current check-in and the
- * list of trusted contacts). Instead of each screen keeping its own copy, we
- * keep it here in one place and let any screen read or change it.
+ * Several screens need the same information (whether you're logged in, the
+ * current check-in and the list of trusted contacts). Instead of each screen
+ * keeping its own copy, we keep it here in one place and let any screen read
+ * or change it.
  *
  * This uses React "Context": the <SafetyProvider> wraps the whole app (see
  * src/app/_layout.tsx), and any screen can call useSafety() to get the data.
  *
  * Where data lives:
- * - On the server (Supabase): the real copy. The server keeps watching your
- *   check-in even if your phone dies.
+ * - On the server (Supabase): the real copy, tied to your phone-number login.
+ *   The server keeps watching your check-in even if your phone dies.
  * - On the phone (AsyncStorage): a copy, so the app opens instantly and the
  *   countdown keeps working with no signal.
  */
@@ -21,16 +22,21 @@ import { AppState } from 'react-native';
 
 import { scheduleCheckInNotifications, setUpNotifications } from '@/services/notifications';
 import {
+  deleteAccount as deleteAccountOnServer,
   deleteContact,
-  ensureSignedIn,
   fetchCheckInStatus,
   fetchContacts,
   fetchProfileName,
+  getLoggedInPhone,
   insertContact,
+  logOut as logOutOnServer,
   markCheckInSafe,
+  onLoginChange,
   saveProfileName,
+  sendLoginCode,
   sendSos as sendSosOnServer,
   startOrUpdateCheckIn,
+  verifyLoginCode,
   type EndCheckInResult,
   type ServerCheckIn,
   type SosResult,
@@ -53,8 +59,17 @@ export type CheckIn = {
 };
 
 // Everything a screen can read or do via useSafety().
-// Functions that talk to the server return true if the server got it.
+// Functions that talk to the server return true (or null for "no error") if it worked.
 type SafetyStore = {
+  // ----- Login -----
+  // Your phone number while logged in; null when logged out.
+  loggedInPhone: string | null;
+  // Each returns an error message, or null if it worked.
+  sendLoginCode: (phone: string) => Promise<string | null>;
+  verifyLoginCode: (phone: string, code: string) => Promise<string | null>;
+  logOut: () => Promise<string | null>;
+  deleteAccount: () => Promise<string | null>;
+
   serverConnected: boolean;
 
   // Your name, used in texts to your Circle ("Alex hasn't checked in").
@@ -113,21 +128,18 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   // useState holds a value and re-draws the screen whenever it changes.
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  // False until the saved data has been read from the phone.
+  // False until the saved data and login state have been read.
   const [loaded, setLoaded] = useState(false);
+  const [loggedInPhone, setLoggedInPhone] = useState<string | null>(null);
   const [serverConnected, setServerConnected] = useState(false);
   const [profileName, setProfileNameState] = useState('');
 
-  // 1) When the app opens: read the phone's copy (fast), then sync with the server.
+  // 1) When the app opens: read the phone's copy (fast) and whether you're logged in.
   useEffect(() => {
     async function load() {
       setUpNotifications().catch((error) => console.warn('Could not set up notifications', error));
-
-      let localContacts: Contact[] = [];
-      let localCheckIn: CheckIn | null = null;
       try {
-        let localName: string | null;
-        [localContacts, localCheckIn, localName] = await Promise.all([
+        const [localContacts, localCheckIn, localName] = await Promise.all([
           loadContacts(),
           loadCheckIn(),
           AsyncStorage.getItem(NAME_KEY),
@@ -138,18 +150,32 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         // Saved data was unreadable: start fresh rather than crash.
         console.warn('Could not load saved data', error);
-      } finally {
-        setLoaded(true);
       }
-
-      await syncWithServer(localContacts, localCheckIn);
+      setLoggedInPhone(await getLoggedInPhone().catch(() => null));
+      setLoaded(true);
     }
+    load();
 
-    async function syncWithServer(localContacts: Contact[], localCheckIn: CheckIn | null) {
-      if (!(await ensureSignedIn())) return;
+    // Keep track of logging in and out (e.g. after entering the login code).
+    return onLoginChange(async () => {
+      setLoggedInPhone(await getLoggedInPhone().catch(() => null));
+    });
+  }, []);
 
-      // Contacts: the server's list is the real one. The very first time,
-      // upload contacts that were added before the app had a server.
+  // 2) Once logged in, sync with the server.
+  useEffect(() => {
+    if (!loaded || !loggedInPhone) return;
+
+    async function syncWithServer() {
+      // Read the phone's copy again so we sync the latest data.
+      const [localContacts, localCheckIn, localName] = await Promise.all([
+        loadContacts().catch(() => [] as Contact[]),
+        loadCheckIn().catch(() => null),
+        AsyncStorage.getItem(NAME_KEY).catch(() => null),
+      ]);
+
+      // Contacts: the server's list is the real one. For a brand-new account,
+      // upload the contacts saved on this phone (e.g. from before logging in).
       let serverContacts = await fetchContacts();
       if (serverContacts === null) return;
       if (serverContacts.length === 0 && localContacts.length > 0) {
@@ -158,26 +184,33 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       }
       setContacts(serverContacts);
 
-      // Your name: use the server's copy if it has one.
+      // Your name: use the server's copy, or upload the phone's copy if the
+      // server has none yet.
       const serverName = await fetchProfileName();
       if (serverName) {
         setProfileNameState(serverName);
         AsyncStorage.setItem(NAME_KEY, serverName).catch(() => {});
+      } else if (localName) {
+        await saveProfileName(localName);
       }
 
-      // Check-in: if the server never got the current one, send it now.
-      if (localCheckIn && !localCheckIn.server && localCheckIn.returnBy.getTime() > Date.now()) {
-        const id = await startOrUpdateCheckIn(localCheckIn.returnBy);
-        if (id) setCheckIn({ ...localCheckIn, server: { id, status: 'active' } });
+      // Check-in: make sure the server has the current one. It may be missing
+      // if it was started offline, or belonged to the old anonymous account.
+      if (localCheckIn && localCheckIn.returnBy.getTime() > Date.now()) {
+        const onServer = localCheckIn.server && (await fetchCheckInStatus(localCheckIn.server.id));
+        if (!onServer) {
+          const id = await startOrUpdateCheckIn(localCheckIn.returnBy);
+          setCheckIn({ ...localCheckIn, server: id ? { id, status: 'active' } : null });
+        }
       }
 
       setServerConnected(true);
     }
 
-    load();
-  }, []);
+    syncWithServer().catch((error) => console.warn('Sync failed', error));
+  }, [loaded, loggedInPhone]);
 
-  // 2) Whenever contacts change (after loading), save the phone's copy.
+  // 3) Whenever contacts change (after loading), save the phone's copy.
   useEffect(() => {
     if (!loaded) return; // don't overwrite saved data with the empty starting list
     AsyncStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts)).catch((error) =>
@@ -185,7 +218,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     );
   }, [contacts, loaded]);
 
-  // 3) Whenever the check-in changes (after loading), save the phone's copy, or
+  // 4) Whenever the check-in changes (after loading), save the phone's copy, or
   //    delete it when it ends. Also reschedule (or cancel) the reminders.
   const returnByTime = checkIn?.returnBy.getTime() ?? null;
   useEffect(() => {
@@ -205,11 +238,11 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     );
   }, [returnByTime, loaded]);
 
-  // 4) While a check-in is on the server, ask it every 30 seconds (and whenever
+  // 5) While a check-in is on the server, ask it every 30 seconds (and whenever
   //    the app comes back to the front) whether it has marked it missed.
   const serverId = checkIn?.server?.id ?? null;
   useEffect(() => {
-    if (!serverId) return;
+    if (!serverId || !loggedInPhone) return;
 
     async function refresh() {
       const latest = await fetchCheckInStatus(serverId!);
@@ -230,9 +263,37 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       appState.remove();
     };
-  }, [serverId]);
+  }, [serverId, loggedInPhone]);
+
+  // Remove everything about this account from the phone (after log out / delete).
+  async function clearPhoneData() {
+    setCheckIn(null);
+    setContacts([]);
+    setProfileNameState('');
+    setServerConnected(false);
+    await AsyncStorage.multiRemove([CONTACTS_KEY, CHECK_IN_KEY, NAME_KEY]).catch(() => {});
+  }
 
   const store: SafetyStore = {
+    loggedInPhone,
+    sendLoginCode,
+    verifyLoginCode,
+    logOut: async () => {
+      // Logging out mid check-in would leave a check-in you can't end, and
+      // your Circle would get a false alarm.
+      if (checkIn) return 'End your check-in (tap "I\'m safe") before logging out.';
+      await logOutOnServer();
+      await clearPhoneData();
+      return null;
+    },
+    deleteAccount: async () => {
+      const error = await deleteAccountOnServer();
+      if (error) return error;
+      await logOutOnServer();
+      await clearPhoneData();
+      return null;
+    },
+
     serverConnected,
 
     profileName,

@@ -33,6 +33,9 @@ export default function AppTabs() {
           <TabTrigger name="sos" href="/sos" asChild>
             <TabButton>SOS</TabButton>
           </TabTrigger>
+          <TabTrigger name="account" href="/account" asChild>
+            <TabButton>Account</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

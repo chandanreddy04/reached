@@ -48,26 +48,71 @@ if (supabase && Platform.OS !== 'web') {
   });
 }
 
-/**
- * Make sure this phone is signed in. The first time, this creates an
- * anonymous account (no email or password); after that it reuses it.
- * Returns true if signed in.
- */
-export async function ensureSignedIn(): Promise<boolean> {
-  if (!supabase) return false;
-  try {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) return true;
+// ----- Logging in with your phone number -----
+//
+// 1. sendLoginCode(phone): Supabase texts a 6-digit code (via Twilio).
+// 2. verifyLoginCode(phone, code): if the code is right, you're logged in.
+// Supabase remembers the login between app launches. Older versions of the
+// app used anonymous accounts; those don't count as logged in any more.
 
-    const { error } = await supabase.auth.signInAnonymously();
+/** The logged-in phone number (e.g. "+15551234567"), or null if not logged in. */
+export async function getLoggedInPhone(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  if (!user || user.is_anonymous || !user.phone) return null;
+  return user.phone.startsWith('+') ? user.phone : `+${user.phone}`;
+}
+
+/** Calls `onChange` whenever you log in or out. Returns a function to stop listening. */
+export function onLoginChange(onChange: () => void): () => void {
+  if (!supabase) return () => {};
+  const { data } = supabase.auth.onAuthStateChange(() => onChange());
+  return () => data.subscription.unsubscribe();
+}
+
+/** Text a login code to this number. Returns an error message, or null if sent. */
+export async function sendLoginCode(phone: string): Promise<string | null> {
+  if (!supabase) return 'Not connected to the server';
+  try {
+    const { error } = await supabase.auth.signInWithOtp({ phone });
+    return error ? error.message : null;
+  } catch {
+    return 'Could not reach the server. Check your internet.';
+  }
+}
+
+/** Check the code. Returns an error message, or null if you're now logged in. */
+export async function verifyLoginCode(phone: string, code: string): Promise<string | null> {
+  if (!supabase) return 'Not connected to the server';
+  try {
+    const { error } = await supabase.auth.verifyOtp({ phone, token: code, type: 'sms' });
+    return error ? error.message : null;
+  } catch {
+    return 'Could not reach the server. Check your internet.';
+  }
+}
+
+export async function logOut(): Promise<void> {
+  await supabase?.auth.signOut().catch(() => {});
+}
+
+/**
+ * Permanently delete your account and everything stored about you on the
+ * server (the "delete-account" server function). Returns an error message,
+ * or null if deleted.
+ */
+export async function deleteAccount(): Promise<string | null> {
+  if (!supabase) return 'Not connected to the server';
+  try {
+    const { error } = await supabase.functions.invoke('delete-account', { body: {} });
     if (error) {
-      console.warn('Anonymous sign-in failed:', error.message);
-      return false;
+      const details = await error.context?.json?.().catch(() => null);
+      return details?.error ?? error.message;
     }
-    return true;
-  } catch (error) {
-    console.warn('Could not reach the server to sign in', error);
-    return false;
+    return null;
+  } catch {
+    return 'Could not reach the server. Check your internet.';
   }
 }
 
