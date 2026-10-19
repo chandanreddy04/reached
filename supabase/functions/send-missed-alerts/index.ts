@@ -1,11 +1,13 @@
 // =====================================================================
-// send-missed-alerts: texts the Circle of everyone who missed a check-in.
+// send-missed-alerts: texts the Circle of everyone who missed a check-in,
+// and later an "all clear" once that person taps "I'm safe".
 //
-// Called every minute by the database (see supabase/stage5.sql), but only
-// when there's a missed check-in whose Circle hasn't been texted yet.
+// Called every minute by the database (see supabase/stage5.sql and
+// supabase/improvements.sql), but only when there's something to send. The
+// app also calls it right after "I'm safe" so the all-clear goes out at once.
 //
-// Safe to call any number of times: each missed check-in is "claimed"
-// (marked as texted) before sending, so nobody is ever texted twice.
+// Safe to call any number of times: each text is "claimed" (marked as sent)
+// before sending, so nobody is ever texted twice.
 //
 // Needs these Edge Function Secrets: TWILIO_ACCOUNT_SID,
 // TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.
@@ -40,11 +42,58 @@ Deno.serve(async () => {
       `They expected to be back by ${backBy}. Please try to contact them.`;
 
     const result = await textEveryone(contacts ?? [], message);
-    await admin.from('check_ins').update({ alerts_summary: result.summary }).eq('id', checkIn.id);
+    await admin
+      .from('check_ins')
+      .update({ alerts_summary: result.summary, alerts_sent_count: result.sent })
+      .eq('id', checkIn.id);
   }
 
-  return json({ processed: claimed?.length ?? 0 });
+  // 3. "All clear": claim every missed check-in whose owner has since tapped
+  //    "I'm safe", once its alerts have finished sending.
+  const { data: safeNow, error: safeError } = await admin
+    .from('check_ins')
+    .update({ all_clear_sent_at: new Date().toISOString(), all_clear_summary: 'Sending…' })
+    .eq('status', 'missed')
+    .not('confirmed_safe_at', 'is', null)
+    .is('all_clear_sent_at', null)
+    .not('alerts_sent_at', 'is', null)
+    .neq('alerts_summary', 'Sending…')
+    .select('id, user_id, alerts_sent_count, alerts_summary');
+  if (safeError) return json({ error: safeError.message }, 500);
+
+  // 4. Text the Circle that they're safe, but only if an alert really reached
+  //    someone (no "all clear" about an alarm nobody received).
+  for (const checkIn of safeNow ?? []) {
+    if (alertsDelivered(checkIn.alerts_sent_count, checkIn.alerts_summary) === 0) {
+      await admin
+        .from('check_ins')
+        .update({ all_clear_summary: 'Not needed: no alert was delivered' })
+        .eq('id', checkIn.id);
+      continue;
+    }
+
+    const [{ data: contacts }, name] = await Promise.all([
+      admin.from('contacts').select('name, phone').eq('user_id', checkIn.user_id),
+      displayName(admin, checkIn.user_id),
+    ]);
+    const message =
+      `✅ Update from Reached: ${name} has checked in and is safe. ` +
+      'Thank you for looking out for them.';
+
+    const result = await textEveryone(contacts ?? [], message);
+    await admin.from('check_ins').update({ all_clear_summary: result.summary }).eq('id', checkIn.id);
+  }
+
+  return json({ processed: claimed?.length ?? 0, allClear: safeNow?.length ?? 0 });
 });
+
+// How many alert texts were delivered. Older check-ins (from before the count
+// was stored) only have the summary, e.g. "Texted 2 of 2 (…)".
+function alertsDelivered(count: number | null, summary: string | null): number {
+  if (count !== null) return count;
+  const match = summary?.match(/^Texted (\d+) of/);
+  return match ? Number(match[1]) : 0;
+}
 
 // "9:30 PM" in the person's own time zone (falls back to UTC).
 function formatTime(iso: string, timeZone: string | null): string {

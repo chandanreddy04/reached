@@ -12,7 +12,8 @@ import { isValidPhone, normalizePhone } from '@/utils/phone';
 
 /** Circle of Trust: the people who get alerted if you miss a check-in. */
 export default function CircleScreen() {
-  const { contacts, addContact, removeContact, profileName, setProfileName } = useSafety();
+  const { contacts, addContact, updateContact, removeContact, profileName, setProfileName } =
+    useSafety();
   const theme = useTheme();
 
   // ----- Your name -----
@@ -41,19 +42,36 @@ export default function CircleScreen() {
   const canAdd = name.trim() !== '' && phoneOk;
   const [saving, setSaving] = useState(false);
 
-  async function handleAdd() {
+  // The contact being edited, or null when the form adds a new person.
+  const [editing, setEditing] = useState<Contact | null>(null);
+
+  function startEditing(contact: Contact) {
+    setEditing(contact);
+    setName(contact.name);
+    setPhone(contact.phone);
+  }
+
+  function stopEditing() {
+    setEditing(null);
+    setName('');
+    setPhone('');
+  }
+
+  async function handleSave() {
     setSaving(true);
-    const saved = await addContact(name, normalizedPhone);
+    const saved = editing
+      ? await updateContact(editing.id, name, normalizedPhone)
+      : await addContact(name, normalizedPhone);
     setSaving(false);
     if (!saved) {
       Alert.alert("Couldn't save", 'The server could not be reached. Check your internet and try again.');
       return; // keep what was typed so you can try again
     }
-    setName(''); // clear the boxes for the next person
-    setPhone('');
+    stopEditing(); // clear the boxes for the next person
   }
 
   async function remove(contact: Contact) {
+    if (editing?.id === contact.id) stopEditing();
     if (!(await removeContact(contact.id))) {
       Alert.alert("Couldn't remove", 'The server could not be reached. Check your internet and try again.');
     }
@@ -107,8 +125,9 @@ export default function CircleScreen() {
         app.
       </ThemedText>
 
-      {/* Add a person */}
+      {/* Add a person (or edit one, after tapping Edit in the list) */}
       <View style={styles.form}>
+        {editing && <ThemedText type="smallBold">Editing {editing.name}</ThemedText>}
         <TextInput
           value={name}
           onChangeText={setName}
@@ -131,10 +150,11 @@ export default function CircleScreen() {
           </ThemedText>
         )}
         <BigButton
-          label={saving ? 'Saving…' : 'Add to Circle'}
-          onPress={handleAdd}
+          label={saving ? 'Saving…' : editing ? 'Save changes' : 'Add to Circle'}
+          onPress={handleSave}
           disabled={!canAdd || saving}
         />
+        {editing && <BigButton label="Cancel" variant="plain" onPress={stopEditing} />}
       </View>
 
       {/* The list of people */}
@@ -154,10 +174,20 @@ export default function CircleScreen() {
                 {/* Contacts added before Stage 5 may lack a country code. */}
                 {!isValidPhone(contact.phone) && (
                   <ThemedText type="small" style={{ color: Brand.red }}>
-                    Can&apos;t be texted: remove and re-add with +country code
+                    Can&apos;t be texted: tap Edit to add the +country code
                   </ThemedText>
                 )}
               </View>
+              <Pressable
+                onPress={() => startEditing(contact)}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${contact.name}`}
+                hitSlop={Spacing.two}
+                style={styles.rowAction}>
+                <ThemedText type="smallBold" style={{ color: Brand.green }}>
+                  Edit
+                </ThemedText>
+              </Pressable>
               <Pressable
                 onPress={() => confirmRemove(contact)}
                 accessibilityRole="button"
@@ -196,5 +226,8 @@ const styles = StyleSheet.create({
   },
   rowText: {
     flex: 1,
+  },
+  rowAction: {
+    marginRight: Spacing.three,
   },
 });

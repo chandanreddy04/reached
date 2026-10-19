@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Platform, StyleSheet } from 'react-native';
 
 import { BigButton } from '@/components/big-button';
+import { RecentActivity } from '@/components/recent-activity';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -47,6 +48,8 @@ export default function AccountScreen() {
           {profileName ? `Name: ${profileName}` : 'Add your name on the Circle tab.'}
         </ThemedText>
       </ThemedView>
+
+      <RecentActivity />
 
       <BigButton
         label="Log out"

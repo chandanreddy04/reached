@@ -145,6 +145,21 @@ export async function insertContact(name: string, phone: string): Promise<Contac
   return data;
 }
 
+export async function updateContact(id: string, name: string, phone: string): Promise<Contact | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('contacts')
+    .update({ name, phone })
+    .eq('id', id)
+    .select('id, name, phone')
+    .single();
+  if (error) {
+    console.warn('Could not update contact:', error.message);
+    return null;
+  }
+  return data;
+}
+
 export async function deleteContact(id: string): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.from('contacts').delete().eq('id', id);
@@ -204,37 +219,53 @@ export type EndCheckInResult =
   | { reached: true; alreadyMissed: false } // marked safe in time: nobody alerted
   // Too late: already missed. alertsSummary says what was actually sent,
   // e.g. "Texted 1 of 1", "Texted 0 of 2 (…errors…)" or "No one in Circle".
-  | { reached: true; alreadyMissed: true; alertsSentAt: string | null; alertsSummary: string | null };
+  // allClearSending: your Circle was alerted, so they're now being texted that you're safe.
+  | {
+      reached: true;
+      alreadyMissed: true;
+      alertsSentAt: string | null;
+      alertsSummary: string | null;
+      allClearSending: boolean;
+    };
 
 /**
- * Tell the server you're safe. Only works while the check-in is still active:
- * if the server already marked it missed, it can't be changed (the privacy
- * rules forbid it), and we report that instead of pretending it worked.
+ * Tell the server you're safe (the "confirm_safe" step in
+ * supabase/improvements.sql). If the check-in is still active it's simply
+ * ended. If the server already marked it missed and texted your Circle, it
+ * stays "missed" in your history and your Circle gets an "all clear" text.
  */
 export async function markCheckInSafe(id: string): Promise<EndCheckInResult> {
   if (!supabase) return { reached: false };
-  const { data, error } = await supabase
-    .from('check_ins')
-    .update({ status: 'safe', ended_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('status', 'active')
-    .select('id');
-  if (error) {
-    console.warn('Could not mark check-in safe:', error.message);
+  const { data, error } = await supabase.rpc('confirm_safe', { p_check_in_id: id });
+  if (error || !data) {
+    if (error) console.warn('Could not confirm safe:', error.message);
     return { reached: false };
   }
-  if (data.length > 0) return { reached: true, alreadyMissed: false };
 
-  // Nothing was updated, so it's no longer active: find out what happened.
-  const latest = await fetchCheckInStatus(id);
-  if (!latest) return { reached: false };
-  if (latest.status === 'safe') return { reached: true, alreadyMissed: false };
+  if (data.result === 'safe') return { reached: true, alreadyMissed: false };
+  if (data.result !== 'already_missed') return { reached: false }; // server doesn't know this check-in
+
+  // Already missed. If an alert really reached someone, send the "all clear"
+  // right away (the every-minute job would also send it within a minute).
+  const delivered = alertsDelivered(data.alerts_sent_count, data.alerts_summary);
+  if (delivered > 0) {
+    supabase.functions.invoke('send-missed-alerts', { body: {} }).catch(() => {});
+  }
   return {
     reached: true,
     alreadyMissed: true,
-    alertsSentAt: latest.alertsSentAt,
-    alertsSummary: latest.alertsSummary,
+    alertsSentAt: data.alerts_sent_at,
+    alertsSummary: data.alerts_summary,
+    allClearSending: delivered > 0,
   };
+}
+
+// How many alert texts were delivered. Older check-ins only have the
+// summary text, e.g. "Texted 2 of 2 (…)".
+function alertsDelivered(count: number | null, summary: string | null): number {
+  if (typeof count === 'number') return count;
+  const match = summary?.match(/^Texted (\d+) of/);
+  return match ? Number(match[1]) : 0;
 }
 
 export type ServerCheckIn = {
@@ -257,6 +288,67 @@ export async function fetchCheckInStatus(id: string): Promise<ServerCheckIn | nu
     alertsSentAt: data.alerts_sent_at,
     alertsSummary: data.alerts_summary,
   };
+}
+
+// ----- History -----
+
+export type HistoryItem =
+  | {
+      kind: 'check-in';
+      at: string; // when it started
+      returnBy: string;
+      status: ServerCheckInStatus;
+      endedAt: string | null; // when you tapped "I'm safe" in time
+      alertsSummary: string | null; // e.g. "Texted 1 of 1"
+      confirmedSafeAt: string | null; // tapped "I'm safe" after it was missed
+      allClearSummary: string | null; // e.g. "Texted 1 of 1", "Not needed: …"
+    }
+  | {
+      kind: 'sos';
+      at: string;
+      alertsSummary: string | null;
+      hadLocation: boolean;
+    };
+
+/** Your most recent check-ins and SOS alerts, newest first (null if offline). */
+export async function fetchHistory(limit = 20): Promise<HistoryItem[] | null> {
+  if (!supabase) return null;
+  const [checkIns, sos] = await Promise.all([
+    supabase
+      .from('check_ins')
+      .select(
+        'started_at, return_by, status, ended_at, alerts_summary, confirmed_safe_at, all_clear_summary',
+      )
+      .order('started_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('sos_events')
+      .select('created_at, alerts_summary, latitude')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
+  if (checkIns.error || sos.error) return null;
+
+  const items: HistoryItem[] = [
+    ...checkIns.data.map((c) => ({
+      kind: 'check-in' as const,
+      at: c.started_at,
+      returnBy: c.return_by,
+      status: c.status as ServerCheckInStatus,
+      endedAt: c.ended_at,
+      alertsSummary: c.alerts_summary,
+      confirmedSafeAt: c.confirmed_safe_at,
+      allClearSummary: c.all_clear_summary,
+    })),
+    ...sos.data.map((s) => ({
+      kind: 'sos' as const,
+      at: s.created_at,
+      alertsSummary: s.alerts_summary,
+      hadLocation: s.latitude !== null,
+    })),
+  ];
+  // Newest first, then keep only the most recent `limit` overall.
+  return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
 
 // ----- Your name -----

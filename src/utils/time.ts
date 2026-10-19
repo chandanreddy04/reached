@@ -5,6 +5,18 @@ export function formatClock(date: Date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+// "Today, 5:29 PM", "Yesterday, 8:02 PM" or "Mon, Oct 13, 7:15 PM".
+export function formatWhen(date: Date) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const time = formatClock(date);
+  if (date.getTime() >= startOfToday.getTime()) return `Today, ${time}`;
+  if (date.getTime() >= startOfToday.getTime() - dayMs) return `Yesterday, ${time}`;
+  const day = date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return `${day}, ${time}`;
+}
+
 // A length of time like "1h 05m 09s" or "4m 30s".
 export function formatDuration(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));

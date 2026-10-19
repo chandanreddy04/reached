@@ -36,6 +36,7 @@ import {
   sendLoginCode,
   sendSos as sendSosOnServer,
   startOrUpdateCheckIn,
+  updateContact as updateContactOnServer,
   verifyLoginCode,
   type EndCheckInResult,
   type ServerCheckIn,
@@ -83,6 +84,7 @@ type SafetyStore = {
 
   contacts: Contact[];
   addContact: (name: string, phone: string) => Promise<boolean>;
+  updateContact: (id: string, name: string, phone: string) => Promise<boolean>;
   removeContact: (id: string) => Promise<boolean>;
 
   sendSos: (
@@ -327,6 +329,12 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       const saved = await insertContact(name.trim(), phone.trim());
       if (!saved) return false;
       setContacts((current) => [...current, saved]);
+      return true;
+    },
+    updateContact: async (id, name, phone) => {
+      const saved = await updateContactOnServer(id, name.trim(), phone.trim());
+      if (!saved) return false;
+      setContacts((current) => current.map((c) => (c.id === id ? saved : c)));
       return true;
     },
     removeContact: async (id) => {

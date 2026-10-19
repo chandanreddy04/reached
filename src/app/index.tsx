@@ -8,7 +8,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useSafety } from '@/state/safety-store';
-import { formatClock, formatDuration } from '@/utils/time';
+import { formatClock, formatDuration, formatMinutes } from '@/utils/time';
+
+// The quick "more time" buttons on Home (in minutes).
+const EXTEND_OPTIONS = [15, 30, 60];
+
+// The new return time after adding `minutes`, counted from now if you're
+// already overdue (so "+15 min" really gives you 15 more minutes).
+function extendedReturnTime(returnBy: Date, minutes: number) {
+  const from = Math.max(returnBy.getTime(), Date.now());
+  return new Date(from + minutes * 60 * 1000);
+}
 
 /**
  * Home screen.
@@ -16,7 +26,7 @@ import { formatClock, formatDuration } from '@/utils/time';
  * - Active check-in: shows a live countdown and an "I'm safe" button.
  */
 export default function HomeScreen() {
-  const { checkIn, endCheckIn, contacts, serverConnected } = useSafety();
+  const { checkIn, startCheckIn, endCheckIn, contacts, serverConnected } = useSafety();
 
   // `now` is updated every second so the countdown keeps moving.
   const [now, setNow] = useState(() => new Date());
@@ -26,6 +36,22 @@ export default function HomeScreen() {
     return () => clearInterval(timer); // stop the timer when leaving the screen
   }, [checkIn]);
 
+  // Move the return time later. If you're already overdue, the extra time
+  // counts from now, so "+15 min" really gives you 15 more minutes.
+  const [extending, setExtending] = useState(false);
+  async function extendBy(minutes: number) {
+    if (!checkIn) return;
+    setExtending(true);
+    const savedToServer = await startCheckIn(extendedReturnTime(checkIn.returnBy, minutes));
+    setExtending(false);
+    if (!savedToServer) {
+      Alert.alert(
+        'Extended on this phone only',
+        "The server couldn't be reached, so it may still mark your check-in as missed at the old time. Check your internet and try again.",
+      );
+    }
+  }
+
   async function handleImSafe() {
     // Remember whether the return time had already passed before ending it.
     const wasOverdue = checkIn !== null && checkIn.returnBy.getTime() <= Date.now();
@@ -34,8 +60,18 @@ export default function HomeScreen() {
     // Tell the truth about whether your Circle was alerted.
     if (result.reached && !result.alreadyMissed) {
       Alert.alert('Glad you made it home!', 'Your check-in has ended. Nobody was alerted.');
+    } else if (result.reached && result.allClearSending && result.alertsSentAt) {
+      Alert.alert(
+        "Glad you're safe",
+        `Your check-in was already missed, and your Circle was alerted at ${formatClock(new Date(result.alertsSentAt))}. We're texting them now that you're safe.`,
+      );
     } else if (result.reached && result.alertsSentAt && result.alertsSummary !== 'Sending…') {
       Alert.alert("Glad you're safe", describeAlertsSent(result.alertsSentAt, result.alertsSummary));
+    } else if (result.reached && result.alertsSummary === 'Sending…') {
+      Alert.alert(
+        "Glad you're safe",
+        "Your Circle is being alerted right now about your missed check-in. As soon as that's done, we'll text them that you're safe.",
+      );
     } else if (result.reached) {
       Alert.alert(
         "Glad you're safe",
@@ -103,6 +139,22 @@ export default function HomeScreen() {
                 : '● Server is watching this check-in'}
           </ThemedText>
         </ThemedView>
+
+        {/* Quick "I need more time" buttons, hidden once your Circle was alerted. */}
+        {!missed && (
+          <View style={styles.extendRow}>
+            {EXTEND_OPTIONS.map((minutes) => (
+              <View key={minutes} style={styles.extendButton}>
+                <BigButton
+                  label={`+${formatMinutes(minutes)}`}
+                  variant="plain"
+                  disabled={extending}
+                  onPress={() => extendBy(minutes)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
 
         <BigButton label="I'm safe" onPress={handleImSafe} />
         <BigButton
@@ -187,6 +239,13 @@ const styles = StyleSheet.create({
     color: Brand.onColor,
     fontSize: 14,
     lineHeight: 20,
+  },
+  extendRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  extendButton: {
+    flex: 1,
   },
   countdown: {
     fontSize: 22,
