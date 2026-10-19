@@ -26,6 +26,13 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+// The app's brand colours. These look fine in both light and dark mode.
+export const Brand = {
+  green: '#1F9D74', // main action colour (check-in, "I'm safe")
+  red: '#E5484D', // danger / SOS
+  onColor: '#ffffff', // text drawn on top of green or red
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
