@@ -5,6 +5,7 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { LoginScreen } from '@/components/login-screen';
+import { WelcomeScreens } from '@/components/welcome-screens';
 import { SafetyProvider, useSafety } from '@/state/safety-store';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,8 +23,11 @@ export default function TabLayout() {
   );
 }
 
-// Logged out: show the login screen. Logged in: show the tabs.
+// Logged in: show the tabs. Logged out: show the welcome pages the first
+// time on this phone, then the login screen.
 function LoginGate() {
-  const { loggedInPhone } = useSafety();
-  return loggedInPhone ? <AppTabs /> : <LoginScreen />;
+  const { loggedInPhone, welcomeSeen, markWelcomeSeen } = useSafety();
+  if (loggedInPhone) return <AppTabs />;
+  if (!welcomeSeen) return <WelcomeScreens onDone={markWelcomeSeen} />;
+  return <LoginScreen />;
 }

@@ -62,6 +62,10 @@ export type CheckIn = {
 // Everything a screen can read or do via useSafety().
 // Functions that talk to the server return true (or null for "no error") if it worked.
 type SafetyStore = {
+  // ----- Welcome screens (shown once per phone, before the first login) -----
+  welcomeSeen: boolean;
+  markWelcomeSeen: () => void;
+
   // ----- Login -----
   // Your phone number while logged in; null when logged out.
   loggedInPhone: string | null;
@@ -98,6 +102,8 @@ const SafetyContext = createContext<SafetyStore | null>(null);
 const CONTACTS_KEY = 'reached:contacts';
 const CHECK_IN_KEY = 'reached:check-in';
 const NAME_KEY = 'reached:name';
+// Kept on log-out: the welcome is about the phone, not the account.
+const WELCOME_KEY = 'reached:welcome-seen';
 
 // How often to ask the server about the active check-in.
 const STATUS_POLL_MS = 30 * 1000;
@@ -135,20 +141,23 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [loggedInPhone, setLoggedInPhone] = useState<string | null>(null);
   const [serverConnected, setServerConnected] = useState(false);
   const [profileName, setProfileNameState] = useState('');
+  const [welcomeSeen, setWelcomeSeen] = useState(false);
 
   // 1) When the app opens: read the phone's copy (fast) and whether you're logged in.
   useEffect(() => {
     async function load() {
       setUpNotifications().catch((error) => console.warn('Could not set up notifications', error));
       try {
-        const [localContacts, localCheckIn, localName] = await Promise.all([
+        const [localContacts, localCheckIn, localName, seen] = await Promise.all([
           loadContacts(),
           loadCheckIn(),
           AsyncStorage.getItem(NAME_KEY),
+          AsyncStorage.getItem(WELCOME_KEY),
         ]);
         setContacts(localContacts);
         setCheckIn(localCheckIn);
         setProfileNameState(localName ?? '');
+        setWelcomeSeen(seen === 'yes');
       } catch (error) {
         // Saved data was unreadable: start fresh rather than crash.
         console.warn('Could not load saved data', error);
@@ -277,6 +286,12 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   }
 
   const store: SafetyStore = {
+    welcomeSeen,
+    markWelcomeSeen: () => {
+      setWelcomeSeen(true);
+      AsyncStorage.setItem(WELCOME_KEY, 'yes').catch(() => {});
+    },
+
     loggedInPhone,
     sendLoginCode,
     verifyLoginCode,

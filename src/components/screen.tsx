@@ -27,7 +27,7 @@ export function Screen({ title, children }: { title: string; children: ReactNode
           paddingBottom: insets.bottom + BottomTabInset + Spacing.four,
         },
       ]}>
-      <ThemedText type="subtitle">{title}</ThemedText>
+      {title !== '' && <ThemedText type="subtitle">{title}</ThemedText>}
       {children}
     </ScrollView>
   );
