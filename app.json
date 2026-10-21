@@ -21,6 +21,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
@@ -56,6 +58,12 @@
         "projectId": "af585981-18ef-4fef-afa9-4807d2a5b574"
       }
     },
-    "owner": "chandanreddy04"
+    "owner": "chandanreddy04",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/af585981-18ef-4fef-afa9-4807d2a5b574"
+    }
   }
 }

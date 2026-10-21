@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 const PAGES = [
   {
     emoji: '⏰',
-    title: 'Heading out?',
+    title: 'Going out?',
     text: 'Tell Reached when you expect to be back. A date, a late run or a trip: it takes one tap.',
   },
   {

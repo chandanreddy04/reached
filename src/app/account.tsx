@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Platform, StyleSheet } from 'react-native';
 
+import { AppVersion } from '@/components/app-version';
 import { BigButton } from '@/components/big-button';
 import { RecentActivity } from '@/components/recent-activity';
 import { Screen } from '@/components/screen';
@@ -91,6 +92,8 @@ export default function AccountScreen() {
           }
         />
       </ThemedView>
+
+      <AppVersion />
     </Screen>
   );
 }

@@ -127,8 +127,7 @@ export default function CheckInScreen() {
 
       <ThemedText type="small" themeColor="textSecondary">
         We&apos;ll remind you shortly before this time (10 minutes before, or halfway through
-        for short check-ins). If you don&apos;t check in, your Circle gets alerted. (Texting
-        your Circle comes in a later stage.)
+        for short check-ins). If you don&apos;t check in, your Circle gets a text.
       </ThemedText>
 
       <BigButton label={checkIn ? 'Update check-in' : 'Start check-in'} onPress={handleStart} />
