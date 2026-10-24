@@ -17,6 +17,19 @@ export function formatWhen(date: Date) {
   return `${day}, ${time}`;
 }
 
+// A big timer like "00:31:05" (hours:minutes:seconds).
+export function formatTimer(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return [
+    Math.floor(totalSeconds / 3600),
+    Math.floor((totalSeconds % 3600) / 60),
+    totalSeconds % 60,
+  ]
+    .map(pad)
+    .join(':');
+}
+
 // A length of time like "1h 05m 09s" or "4m 30s".
 export function formatDuration(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));

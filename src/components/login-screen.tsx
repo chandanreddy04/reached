@@ -65,7 +65,7 @@ export function LoginScreen() {
 
   const inputStyle = [
     styles.input,
-    { color: theme.text, backgroundColor: theme.backgroundElement },
+    { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border },
   ];
 
   // ----- Step 2: enter the code -----
@@ -183,7 +183,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   codeInput: {
     fontSize: 28,

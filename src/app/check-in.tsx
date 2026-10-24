@@ -1,12 +1,13 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { BigButton } from '@/components/big-button';
+import { Card } from '@/components/card';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, BrandGradient, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { askNotificationPermission } from '@/services/notifications';
 import { useSafety } from '@/state/safety-store';
@@ -82,7 +83,17 @@ export default function CheckInScreen() {
   }
 
   return (
-    <Screen title={checkIn ? 'Change check-in' : 'Set a check-in'}>
+    <Screen title={checkIn ? 'Change return time' : 'Start a session'}>
+      {/* Check-in isn't a tab, so offer a way back to Home. */}
+      <Pressable
+        onPress={() => router.navigate('/')}
+        accessibilityRole="button"
+        style={styles.back}
+        hitSlop={Spacing.three}>
+        <Ionicons name="chevron-back" size={20} color={Brand.green} />
+        <ThemedText style={{ color: Brand.green }}>Home</ThemedText>
+      </Pressable>
+
       <ThemedText themeColor="textSecondary">How long will you be out?</ThemedText>
 
       {/* Preset buttons: 5 min, 30 min, 1 hr, 2 hr, 3 hr (+ "1 min (test)" while developing) */}
@@ -97,7 +108,9 @@ export default function CheckInScreen() {
               accessibilityState={{ selected }}
               style={[
                 styles.preset,
-                { backgroundColor: selected ? Brand.green : theme.backgroundElement },
+                selected
+                  ? { backgroundColor: Brand.green, experimental_backgroundImage: BrandGradient }
+                  : { backgroundColor: theme.backgroundElement, borderColor: theme.border, borderWidth: 1 },
               ]}>
               <ThemedText style={selected && { color: Brand.onColor }}>
                 {preset === TEST_PRESET ? '1 min (test)' : formatMinutes(preset)}
@@ -108,29 +121,29 @@ export default function CheckInScreen() {
       </View>
 
       {/* Fine-tune with - and + */}
-      <ThemedView type="backgroundElement" style={styles.card}>
+      <Card>
         <View style={styles.stepper}>
-          <BigButton label={`− ${STEP}`} variant="plain" onPress={() => changeBy(-STEP)} />
+          <BigButton label={`− ${STEP}m`} variant="outline" size="small" onPress={() => changeBy(-STEP)} />
           <ThemedText type="smallBold" style={styles.duration}>
             {formatMinutes(minutes)}
           </ThemedText>
-          <BigButton label={`+ ${STEP}`} variant="plain" onPress={() => changeBy(STEP)} />
+          <BigButton label={`+ ${STEP}m`} variant="outline" size="small" onPress={() => changeBy(STEP)} />
         </View>
 
         <ThemedText themeColor="textSecondary" style={styles.center}>
           You&apos;ll be back by
         </ThemedText>
-        <ThemedText type="subtitle" style={styles.center}>
+        <ThemedText type="subtitle" style={[styles.center, styles.eta]}>
           {formatClock(returnBy)}
         </ThemedText>
-      </ThemedView>
+      </Card>
 
       <ThemedText type="small" themeColor="textSecondary">
         We&apos;ll remind you shortly before this time (10 minutes before, or halfway through
         for short check-ins). If you don&apos;t check in, your Circle gets a text.
       </ThemedText>
 
-      <BigButton label={checkIn ? 'Update check-in' : 'Start check-in'} onPress={handleStart} />
+      <BigButton label={checkIn ? 'Update return time' : 'Start session'} onPress={handleStart} />
     </Screen>
   );
 }
@@ -141,15 +154,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
+  back: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginTop: -Spacing.three,
+  },
   preset: {
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.four,
+    borderRadius: 999,
   },
-  card: {
-    padding: Spacing.four,
-    borderRadius: Spacing.four,
-    gap: Spacing.two,
+  eta: {
+    fontWeight: 800,
   },
   stepper: {
     flexDirection: 'row',

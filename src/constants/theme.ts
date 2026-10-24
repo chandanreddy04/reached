@@ -9,18 +9,20 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#2C3E50', // dark navy headings and body text
+    background: '#F5F7FA', // light grey page background
+    backgroundElement: '#FFFFFF', // white cards
+    backgroundSelected: '#E3F5F1', // soft teal (selected items, step circles)
+    textSecondary: '#7B8794', // soft grey secondary text
+    border: '#D7EEE8', // thin teal-tinted card borders
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#F2F5F7',
+    background: '#0F1418',
+    backgroundElement: '#1A2228',
+    backgroundSelected: '#173A34',
+    textSecondary: '#9AA5AF',
+    border: '#24333A',
   },
 } as const;
 
@@ -28,10 +30,17 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 // The app's brand colours. These look fine in both light and dark mode.
 export const Brand = {
-  green: '#1F9D74', // main action colour (check-in, "I'm safe")
-  red: '#E5484D', // danger / SOS
-  onColor: '#ffffff', // text drawn on top of green or red
+  green: '#14A38B', // main teal action colour (buttons, accents, "I'm safe")
+  greenDark: '#0F8A76', // darker end of the teal gradient
+  red: '#E5484D', // danger / missed check-ins
+  yellow: '#FFD43B', // the SOS button
+  onColor: '#ffffff', // text drawn on top of teal or red
+  onYellow: '#3A2F00', // text drawn on top of yellow
 } as const;
+
+// Soft teal gradient for main buttons and icon circles (plain styling, so it
+// works without any extra library).
+export const BrandGradient = `linear-gradient(135deg, #1BB99F, ${Brand.greenDark})`;
 
 export const Fonts = Platform.select({
   ios: {
@@ -68,5 +77,7 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+// Extra space at the bottom of each screen so content clears the raised SOS
+// button, which sticks up above the tab bar.
+export const BottomTabInset = 28;
 export const MaxContentWidth = 800;

@@ -89,6 +89,13 @@ async function setUp() {
   }
 }
 
+/** True if reminders can be shown (notification permission granted). Doesn't ask. */
+export async function notificationsAllowed(): Promise<boolean> {
+  if (!Notifications) return false;
+  const { granted } = await Notifications.getPermissionsAsync();
+  return granted;
+}
+
 /**
  * Ask the user for permission to show notifications (only asks once; after
  * that the phone remembers the answer). Returns true if allowed.

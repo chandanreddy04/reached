@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BigButton } from '@/components/big-button';
+import { Card } from '@/components/card';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { getSosLocation, type SosLocation } from '@/services/location';
 import type { SosResult } from '@/services/server';
@@ -69,7 +69,7 @@ export default function SosScreen() {
           accessibilityLabel="Send SOS to your Circle"
           style={({ pressed }) => [styles.sosButton, pressed && styles.pressed]}>
           {state.step === 'locating' ? (
-            <ActivityIndicator size="large" color={Brand.onColor} />
+            <ActivityIndicator size="large" color={Brand.onYellow} />
           ) : (
             <Text style={styles.sosText}>SOS</Text>
           )}
@@ -107,7 +107,7 @@ function SentCard({
   const allSent = result.ok && result.total > 0 && result.sent === result.total;
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <Card>
       {result.ok ? (
         <>
           <ThemedText type="smallBold" style={{ color: allSent ? Brand.green : Brand.red }}>
@@ -163,7 +163,7 @@ function SentCard({
       )}
 
       <BigButton label="Done" onPress={onDone} />
-    </ThemedView>
+    </Card>
   );
 }
 
@@ -178,25 +178,24 @@ const styles = StyleSheet.create({
     width: SIZE,
     height: SIZE,
     borderRadius: SIZE / 2,
-    backgroundColor: Brand.red,
+    backgroundColor: Brand.yellow,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 6,
+    borderColor: '#FFFFFF',
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18)',
   },
   pressed: {
     transform: [{ scale: 0.95 }],
     opacity: 0.85,
   },
   sosText: {
-    color: Brand.onColor,
+    color: Brand.onYellow,
     fontSize: 48,
     fontWeight: 800,
+    letterSpacing: 2,
   },
   note: {
     textAlign: 'center',
-  },
-  card: {
-    padding: Spacing.four,
-    borderRadius: Spacing.four,
-    gap: Spacing.two,
   },
 });

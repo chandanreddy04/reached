@@ -4,7 +4,8 @@ import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { BigButton } from '@/components/big-button';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
 import { Brand, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { type Contact, useSafety } from '@/state/safety-store';
@@ -86,7 +87,7 @@ export default function CircleScreen() {
 
   const inputStyle = [
     styles.input,
-    { color: theme.text, backgroundColor: theme.backgroundElement },
+    { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border },
   ];
 
   return (
@@ -165,7 +166,12 @@ export default function CircleScreen() {
       ) : (
         <View style={styles.list}>
           {contacts.map((contact) => (
-            <ThemedView key={contact.id} type="backgroundElement" style={styles.row}>
+            <View
+              key={contact.id}
+              style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+              <View style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]}>
+                <Ionicons name="person" size={20} color={Brand.green} />
+              </View>
               <View style={styles.rowText}>
                 <ThemedText type="smallBold">{contact.name}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
@@ -197,7 +203,7 @@ export default function CircleScreen() {
                   Remove
                 </ThemedText>
               </Pressable>
-            </ThemedView>
+            </View>
           ))}
         </View>
       )}
@@ -213,7 +219,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   list: {
     gap: Spacing.two,
@@ -221,8 +228,17 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.three,
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowText: {
     flex: 1,

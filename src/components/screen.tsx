@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -22,18 +22,24 @@ export function Screen({ title, children }: { title: string; children: ReactNode
       contentContainerStyle={[
         styles.content,
         {
-          // On web the tab bar sits at the top, so leave extra room for it.
-          paddingTop: insets.top + (Platform.OS === 'web' ? Spacing.six + Spacing.three : Spacing.four),
+          paddingTop: insets.top + Spacing.four,
           paddingBottom: insets.bottom + BottomTabInset + Spacing.four,
         },
       ]}>
-      {title !== '' && <ThemedText type="subtitle">{title}</ThemedText>}
+      {title !== '' && (
+        <ThemedText type="subtitle" style={styles.title}>
+          {title}
+        </ThemedText>
+      )}
       {children}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  title: {
+    fontWeight: 800,
+  },
   content: {
     paddingHorizontal: Spacing.four,
     gap: Spacing.four,

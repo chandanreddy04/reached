@@ -1,48 +1,128 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Tabs } from 'expo-router';
+import { type ComponentProps } from 'react';
+import {
+  type ColorValue,
+  type GestureResponderEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors } from '@/constants/theme';
+import { Brand } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
+// A tab icon: filled when the tab is selected, outlined otherwise.
+function tabIcon(filled: IconName, outline: IconName) {
+  function TabIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
+    return <Ionicons name={focused ? filled : outline} size={26} color={color as string} />;
+  }
+  return TabIcon;
+}
 
 /**
- * The bottom tab bar. Each <NativeTabs.Trigger name="..."> matches a file in
- * src/app/ (e.g. name="circle" -> src/app/circle.tsx).
- *
- * Icons: `sf` is an Apple SF Symbol (iPhone), `md` is a Google Material
- * Symbol (Android).
+ * The bottom tab bar: Home · Circle · (SOS) · Notifications · Settings.
+ * SOS is a round yellow button raised above the bar. Check-in and Session
+ * History are screens too, but opened from Home and Settings instead of tabs.
+ * Each <Tabs.Screen name="..."> matches a file in src/app/.
  */
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="house" md="home" />
-      </NativeTabs.Trigger>
+    <Tabs
+      screenOptions={{
+        headerShown: false, // each screen draws its own title
+        tabBarShowLabel: false, // icons only, like the design
+        tabBarActiveTintColor: Brand.green,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarStyle: {
+          backgroundColor: theme.backgroundElement,
+          borderTopColor: theme.border,
+          height: 64 + insets.bottom,
+          paddingTop: 8,
+        },
+      }}>
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Home', tabBarIcon: tabIcon('home', 'home-outline') }}
+      />
+      <Tabs.Screen
+        name="circle"
+        options={{ title: 'Circle', tabBarIcon: tabIcon('people-circle', 'people-circle-outline') }}
+      />
+      <Tabs.Screen
+        name="sos"
+        options={{
+          title: 'SOS',
+          tabBarButton: (props) => <SosTabButton onPress={props.onPress ?? undefined} />,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Notifications',
+          tabBarIcon: tabIcon('notifications', 'notifications-outline'),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ title: 'Settings', tabBarIcon: tabIcon('settings', 'settings-outline') }}
+      />
 
-      <NativeTabs.Trigger name="check-in">
-        <NativeTabs.Trigger.Label>Check-in</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="clock" md="schedule" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="circle">
-        <NativeTabs.Trigger.Label>Circle</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.2" md="group" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="sos">
-        <NativeTabs.Trigger.Label>SOS</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="exclamationmark.triangle" md="sos" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="account">
-        <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.crop.circle" md="account_circle" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+      {/* Real screens, but not shown as tabs. */}
+      <Tabs.Screen name="check-in" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+    </Tabs>
   );
 }
+
+const SOS_SIZE = 72;
+
+// The big round yellow SOS button in the middle of the tab bar.
+function SosTabButton({ onPress }: { onPress?: (e: GestureResponderEvent) => void }) {
+  return (
+    <View style={styles.sosSlot}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="SOS"
+        style={({ pressed }) => [styles.sosButton, pressed && styles.sosPressed]}>
+        <Text style={styles.sosText}>SOS</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  sosSlot: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  sosButton: {
+    width: SOS_SIZE,
+    height: SOS_SIZE,
+    borderRadius: SOS_SIZE / 2,
+    marginTop: -SOS_SIZE / 2, // raised: half of it sticks up above the bar
+    backgroundColor: Brand.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.18)',
+  },
+  sosPressed: {
+    transform: [{ scale: 0.94 }],
+  },
+  sosText: {
+    color: Brand.onYellow,
+    fontSize: 20,
+    fontWeight: 800,
+    letterSpacing: 1,
+  },
+});
