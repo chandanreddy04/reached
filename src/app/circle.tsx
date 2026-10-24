@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { BigButton } from '@/components/big-button';
 import { Screen } from '@/components/screen';
@@ -8,13 +8,21 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Brand, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { pickPhoneContact } from '@/services/contacts';
 import { type Contact, useSafety } from '@/state/safety-store';
 import { isValidPhone, normalizePhone } from '@/utils/phone';
 
 /** Circle of Trust: the people who get alerted if you miss a check-in. */
 export default function CircleScreen() {
-  const { contacts, addContact, updateContact, removeContact, profileName, setProfileName } =
-    useSafety();
+  const {
+    contacts,
+    addContact,
+    updateContact,
+    removeContact,
+    profileName,
+    setProfileName,
+    loggedInPhone,
+  } = useSafety();
   const theme = useTheme();
 
   // ----- Your name -----
@@ -58,7 +66,65 @@ export default function CircleScreen() {
     setPhone('');
   }
 
+  // Fill the form from the phone's address book (one person at a time).
+  async function handleImport() {
+    const result = await pickPhoneContact();
+    if (result.kind === 'denied') {
+      Alert.alert(
+        'Contacts permission needed',
+        'Allow Reached to read contacts in your phone settings, or type the name and number instead.',
+      );
+      return;
+    }
+    if (result.kind === 'error') {
+      Alert.alert("Couldn't open contacts", 'Please type the name and number instead.');
+      return;
+    }
+    if (result.kind !== 'picked') return; // cancelled, or not available here
+
+    if (result.phones.length === 0) {
+      Alert.alert('No phone number', `${result.name || 'This contact'} has no phone number saved.`);
+      return;
+    }
+
+    const fill = (number: string) => {
+      setEditing(null);
+      setName(result.name);
+      setPhone(number);
+    };
+    if (result.phones.length === 1) {
+      fill(result.phones[0].number);
+      return;
+    }
+    // Several numbers: let the user choose which one gets the texts.
+    Alert.alert(
+      'Which number?',
+      `${result.name || 'This contact'} has more than one number.`,
+      [
+        ...result.phones.slice(0, 4).map((p) => ({
+          text: `${p.label}: ${p.number}`,
+          onPress: () => fill(p.number),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
+  }
+
   async function handleSave() {
+    // Don't add the same number twice (ignoring the person being edited).
+    const duplicate = contacts.find(
+      (c) => c.id !== editing?.id && normalizePhone(c.phone) === normalizedPhone,
+    );
+    if (duplicate) {
+      Alert.alert('Already in your Circle', `${duplicate.name} is already in your Circle with this number.`);
+      return;
+    }
+    // Your own number can't alert you about yourself.
+    if (loggedInPhone && normalizePhone(loggedInPhone) === normalizedPhone) {
+      Alert.alert('That’s your own number', 'Add someone who’d check on you.');
+      return;
+    }
+
     setSaving(true);
     const saved = editing
       ? await updateContact(editing.id, name, normalizedPhone)
@@ -129,6 +195,10 @@ export default function CircleScreen() {
       {/* Add a person (or edit one, after tapping Edit in the list) */}
       <View style={styles.form}>
         {editing && <ThemedText type="smallBold">Editing {editing.name}</ThemedText>}
+        {/* The phone's contact picker doesn't exist on the web preview. */}
+        {!editing && Platform.OS !== 'web' && (
+          <BigButton label="Import from contacts" variant="outline" onPress={handleImport} />
+        )}
         <TextInput
           value={name}
           onChangeText={setName}

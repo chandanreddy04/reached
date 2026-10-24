@@ -22,9 +22,9 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ]
+        "android.permission.READ_CONTACTS"
+      ],
+      "blockedPermissions": ["android.permission.WRITE_CONTACTS"]
     },
     "web": {
       "output": "static",
@@ -46,7 +46,13 @@
           "locationWhenInUsePermission": "Reached uses your location only when you press SOS, so your Circle knows where to find you."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Reached uses your contacts only to let you pick people for your Circle."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
